@@ -7,3 +7,6 @@ ChromaDB automatically performs cosine-similarity search when retrieving documen
 5. GOOGLE_API_KEY=2jehgg32_33w
 6. put yout api key in .env file            
              # GFG_RAG_project
+Add your PDF files in data folder and make sure they have text also check with adjusting different score_threshold value .
+check for bugs
+#  IMP create separate branches and dont push into the main branch 
