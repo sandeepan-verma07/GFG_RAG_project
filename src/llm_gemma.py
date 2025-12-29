@@ -1,4 +1,4 @@
-from google import genai
+from google.genai import Client
 import os
 
 
@@ -8,7 +8,7 @@ class GemmaLLM:
         if not api_key:
             raise ValueError("GOOGLE_API_KEY not set in .env")
 
-        self.client = genai.Client(api_key=api_key)
+        self.client = Client(api_key=api_key)
         self.model_name = model_name
     def generate(self, question, context):
 

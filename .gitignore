@@ -16,3 +16,6 @@ venv/
 # Data files (optional if large/private)
 
 vector_store/
+
+
+.env

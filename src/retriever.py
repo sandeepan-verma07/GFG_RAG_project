@@ -1,5 +1,5 @@
-from src.embeddings import EmbeddingManager
-from src.vectore_store import VectorStore
+from embeddings import EmbeddingManager
+from vectore_store import VectorStore
 
 
 class RAGRetriever:
