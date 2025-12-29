@@ -16,3 +16,9 @@ venv/
 # Data files (optional if large/private)
 
 vector_store/
+
+
+.env
+.env
+pyproject.toml
+uv.lock

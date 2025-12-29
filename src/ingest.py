@@ -1,6 +1,6 @@
-from src.loader import load_and_chunk_pdfs
-from src.embeddings import EmbeddingManager
-from src.vectore_store import VectorStore
+from loader import load_and_chunk_pdfs
+from embeddings import EmbeddingManager
+from vectore_store import VectorStore
 
 def run_ingest():
     pdf_folder = "./data"
