@@ -1,30 +1,34 @@
-from src.vectore_store import VectorStore
-from src.embeddings import EmbeddingManager
-from src.retriever import RAGRetriever
 from src.llm_gemma import GemmaLLM
-from dotenv import load_dotenv
-load_dotenv()
 
-
-embedder = EmbeddingManager()
-vector_store = VectorStore()
-
-retriever = RAGRetriever(vector_store, embedder)
 gemma = GemmaLLM()
 
+def rag_answer(question: str, context_chunks):
+    """
+    Takes a user question + retrieved Qdrant/Web chunks,
+    extracts readable text, and calls the LLM.
+    """
 
+    def extract_text(chunk):
+        # Web + Qdrant formats
+        if isinstance(chunk, dict):
+            if "text" in chunk:
+                return str(chunk["text"])
 
-def rag_answer(question: str):
+            if "content" in chunk:
+                return str(chunk["content"])
 
+            # Some Qdrant payload styles
+            if "payload" in chunk and "text" in chunk["payload"]:
+                return str(chunk["payload"]["text"])
 
-    results = retriever.retrieve(question, top_k=3)
+        # Fallback — force string
+        return str(chunk)
 
-    if not results:
-        return "No relevant context found."
+    if not context_chunks:
+        context_text = ""
+    else:
+        context_text = "\n\n".join(
+            extract_text(c) for c in context_chunks
+        )
 
-
-    context = "\n\n".join([doc["content"] for doc in results])
-
-    answer = gemma.generate(question, context)
-
-    return answer
+    return gemma.generate(question, context_text)
