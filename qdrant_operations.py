@@ -10,8 +10,8 @@ class QdrantConfig:
         url: str,
         api_key: str,
         collection_name: str = "all_user_docs", 
-        vector_size: int = 384,                    # change according to embedding model ###############################
-        distance: str = "Cosine",                  #check
+        vector_size: int = 384,                    
+        distance: str = "Cosine",     
     ):
         self.url = url
         self.api_key = api_key
@@ -38,9 +38,9 @@ def ensure_collection(client: QdrantClient, cfg: QdrantConfig) -> None:
                 size=cfg.vector_size,
                 distance=models.Distance(cfg.distance),
             ),
-            hnsw_config=models.HnswConfigDiff(         #The speed of indexation may become a bottleneck in this case, as each user’s vector will be indexed into the same collection. To avoid this bottleneck, consider bypassing the construction of a global vector index for the entire collection and building it only for individual groups instead. By adopting this strategy, Qdrant will index vectors for each user independently, significantly accelerating the process. To implement this approach, you should:
+            hnsw_config=models.HnswConfigDiff(        
                 payload_m=16,
-                m=0,     #This will disable building global index for the whole collection.
+                m=0,    
             ),
         )
 
@@ -50,14 +50,11 @@ def ensure_collection(client: QdrantClient, cfg: QdrantConfig) -> None:
             field_name="user_id",
             field_schema=models.KeywordIndexParams(
                 type=models.KeywordIndexType.KEYWORD,
-                is_tenant=True,   # marks user_id as tenant identifier,  this optimizes the search/filter speed
+                is_tenant=True,   
             ),
         )
 
-        # https://qdrant.tech/documentation/guides/multitenancy/
-
-
-        # Create keyword index on "doc_id"
+        
         client.create_payload_index(
             collection_name=cfg.collection_name,
             field_name="doc_id",
@@ -82,14 +79,14 @@ def upsert_chunks(
     """
     points = []
     for i, (vec, chunk) in enumerate(zip(vectors, chunks)):
-        point_id = str(uuid.uuid4())  # f"{user_id}:{filename}:{i}"
+        point_id = str(uuid.uuid4())  
         points.append(
             models.PointStruct(
                 id=point_id,
                 vector=vec,
                 payload={
                     "user_id": user_id,
-                    "doc_id": filename,   # filename used as doc_id
+                    "doc_id": filename,  
                     "filename": filename,
                     "page": chunk["page"],
                     "chunk_index": i,
@@ -157,63 +154,6 @@ def delete_document(
 
 
 
-# def search(
-#     client: QdrantClient,
-#     cfg: QdrantConfig,
-#     user_id: str,
-#     query_vector: List[float],
-#     limit: int = 5,
-#     filename: Optional[str] = None,
-# ) -> List[Dict]:
-#     """
-#     Search Qdrant with query_vector.
-#     Scope by user_id, optionally restrict to filename (doc_id).
-#     Returns list of payload dicts.
-#     """
-#     must = [models.FieldCondition(key="user_id", match=models.MatchValue(value=user_id))]
-#     if filename:
-#         must.append(models.FieldCondition(key="doc_id", match=models.MatchValue(value=filename)))
-
-#     results = client.query_points( #search(
-#         collection_name=cfg.collection_name,
-#         query=query_vector,
-#         limit=limit,
-#         query_filter=models.Filter(must=must),
-#         with_payload=True,
-#     )
-#     # # return [r.payload for r in results if r.payload]
-#     # # return type(results)# [r for r in results]
-#     # result_text = []
-#     # for point in results.points:
-#     #     # Points store metadata in the 'payload' dictionary
-#     #     result_text.append(point.payload.get("text"))
-
-#     # return result_text
-
-#     # Normalize return type
-#     if isinstance(results, tuple):
-#         points, _ = results
-#     elif hasattr(results, "points"):
-#         points = results.points
-#     else:
-#         points = results
-
-#     # return [
-#     #     {
-#     #         "doc_id": p.payload.get("doc_id"),
-#     #         "text": p.payload.get("text"),
-#     #         "score": getattr(p, "score", None),
-#     #     }
-#     #     for p in points
-#     # ]
-
-#     return [
-#         {
-#             "doc_id": points[0].payload.get("doc_id"),
-#             "text": points[0].payload.get("text"),
-#             "score": getattr(points[0], "score", None),
-#         }
-#     ]
 
 def search(
     client: QdrantClient,
@@ -248,7 +188,6 @@ def search(
     else:
         points = results
 
-    # Deduplicate by (doc_id, chunk_index) to avoid repeats
     seen = set()
     unique_results = []
     for p in points:

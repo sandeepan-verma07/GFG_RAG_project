@@ -92,30 +92,6 @@ def get_active_user_id():
 
 
 
-CURRENT_YEAR = 2025
-
-def is_relevant(snippet, query):
-    q = query.lower()
-
-    if isinstance(snippet, dict):
-        text = snippet.get("content", "")
-    else:
-        text = str(snippet)
-
-    s = text.lower()
-
-    # country filter
-    if "usa" in q or "united states" in q:
-        if not ("usa" in s or "united states" in s or "america" in s):
-            return False
-
-    # time filter for "current" questions
-    if "current" in q or "president" in q:
-        years = [int(y) for y in re.findall(r"(19\d{2}|20\d{2})", s)]
-        if years and max(years) < CURRENT_YEAR:
-            return False   # ❌ outdated info
-
-    return True
 
 
 
@@ -229,7 +205,6 @@ if user_query:
         "score": 1.0
     }
     for snippet in web_results
-    if is_relevant(snippet, user_query)
 ]
 
 
