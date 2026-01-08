@@ -43,49 +43,40 @@ It supports:
 
 ## 🧠 High-Level Architecture
 
-User Query
-↓
-Embed Query
-↓
-Qdrant Vector Search (PDFs)
-↓
-Similarity Check (threshold = 0.35)
-↓
-┌───────────────┐
-│ Score < 0.35? │── Yes ──► Tavily Web Search
-└───────┬───────┘
-│ No
-↓
-Merge PDF + Web Context
-↓
-Fetch User Memories (Mem0)
-↓
-Inject Recent Chat History
-↓
-Gemma 3 LLM
-↓
-Answer
-↓
-Save Memory to Mem0 
+- User Query
+- ↓
+- Embed Query (Sentence-Transformers, 384-dim)
+- ↓
+- Qdrant Vector Search (User PDFs, tenant = user_id)
+- ↓
+- Check Top Similarity Score (threshold = 0.35)
+- ↓
+- ┌───────────────────────────────┐
+- │ Is score < 0.35 OR no results?│
+- └───────────────┬───────────────┘
+- │
+- Yes ────┴───► Tavily Web Search
+- │ (top results, relevance filtered)
+- │
+- No
+- │
+- Use PDF Context Only
+- ↓
+- Merge PDF Context + Web Context (if any)
+- ↓
+- Fetch Long-Term User Memories (Mem0, user_id scoped)
+- ↓
+- Inject Recent Chat History (current session)
+- ↓
+- Gemma-3 LLM (strict context-priority prompting)
+- ↓
+- Final Answer
+- ↓
+- Store Conversation Back to Mem0 (long-term memory)
+
+
 ---
 
-## 📁 Project Structure
-.
-├── main.py # Streamlit app
-├── init_qdrant.py # Qdrant collection initialization
-├── qdrant_operations.py # Qdrant CRUD + search
-├── src/
-│ ├── embeddings.py # Embedding manager
-│ ├── loader.py # PDF loading & chunking
-│ ├── llm_gemma.py # Gemma 3 LLM wrapper
-│ ├── mem0_client.py # Mem0 memory handling
-│ ├── rag_core.py # RAG orchestration logic
-│ ├── retriever.py # Chroma retriever (offline)
-│ └── vectore_store.py # Chroma vector store
-├── ingest.py # Offline PDF ingest pipeline
-├── requirements.txt
-├── .env
-└── data/ # PDFs for offline ingest
 
 ---
 
