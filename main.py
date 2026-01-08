@@ -8,12 +8,15 @@ from dotenv import load_dotenv
 from st_copy_to_clipboard import st_copy_to_clipboard
 from langchain_community.tools.tavily_search import TavilySearchResults
 from src.rag_core import rag_answer
-
+import re
+from datetime import datetime
 
 
 from pipeline.chunk_pdf import chunk_pdf
 from src.embeddings import EmbeddingManager
 from src.llm_gemma import GemmaLLM
+from src.mem0_client import add_user_memories
+
 embedder = EmbeddingManager()
 
 
@@ -88,10 +91,43 @@ def get_active_user_id():
     return active_user_id
 
 
+
+CURRENT_YEAR = 2025
+
+def is_relevant(snippet, query):
+    q = query.lower()
+
+    if isinstance(snippet, dict):
+        text = snippet.get("content", "")
+    else:
+        text = str(snippet)
+
+    s = text.lower()
+
+    # country filter
+    if "usa" in q or "united states" in q:
+        if not ("usa" in s or "united states" in s or "america" in s):
+            return False
+
+    # time filter for "current" questions
+    if "current" in q or "president" in q:
+        years = [int(y) for y in re.findall(r"(19\d{2}|20\d{2})", s)]
+        if years and max(years) < CURRENT_YEAR:
+            return False   # ❌ outdated info
+
+    return True
+
+
+
 ######################################################################################################## MAIN APP
 st.title("RAG Chatbot")
 
+# initiate chat history in session state
+if "messages" not in st.session_state:
+    st.session_state["messages"] = []   # list of {"role": "user"/"assistant", "content": str}
+
 active_user_id = get_active_user_id()
+
 
 def process_pdf(uploaded_file, chunk_size=800, chunk_overlap=200):
     chunks = chunk_pdf(uploaded_file, chunk_size, chunk_overlap)
@@ -127,17 +163,32 @@ for doc_id, fname in docs:
 
 
 
-SCORE_THRESHOLD = 0.40  # threshold  changed 
+SCORE_THRESHOLD = 0.35  # threshold  changed 
 mode = st.radio(
     "Choose retrieval mode:",
     ["Hybrid (PDF + Web)", "PDF only", "Web only"],
     index=0
 )
 
+# existing messages in chat style render
+for msg in st.session_state["messages"]:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-query = st.text_input("Ask a question:")
-if query:
-    query_vector = embedder.embed_texts([query])[0]
+        
+
+#input for chat
+user_query = st.chat_input("Ask a question:")
+
+
+if user_query:
+    # Append user message to history and render
+    st.session_state["messages"].append({"role": "user", "content": user_query})
+    with st.chat_message("user"):
+        st.markdown(user_query)
+
+    # Embedding for retrieval
+    query_vector = embedder.embed_texts([user_query])[0]
 
     doc_options = ["All PDFs"] + [fname for _, fname in docs]
     selected_doc = st.selectbox("Search scope:", doc_options)
@@ -145,7 +196,7 @@ if query:
     # always start with empty context
     context = []
 
-    # Only search PDFs if NOT "Web only"
+
     if mode != "Web only":
         context = search(
             qdrant_client, cfg, active_user_id, query_vector,
@@ -155,53 +206,64 @@ if query:
     # Check score threshold
     use_web = False
 
-# PDF only                  ## changes by sandeepan to add the buttons 
     if mode == "PDF only":
-      use_web = False
-
-# Web only 
+        use_web = False
     elif mode == "Web only":
-       context = []          
-       use_web = True
-
-# ----- Hybrid (Corrective RAG)
+        context = []
+        use_web = True
     else:
-      if not context:
-        use_web = True
-      elif context[0]["score"] < SCORE_THRESHOLD:
-        use_web = True
+        if not context:
+            use_web = True
+        elif context[0]["score"] < SCORE_THRESHOLD:
+            use_web = True
 
- 
     web_context = []
     if use_web:
         st.info("Low similarity score — fetching Tavily results...")
-        web_results = tavily_tool.run(query)   # returns list of snippets
+        web_results = tavily_tool.run(user_query)[:3]
+
         web_context = [
-            {"doc_id": "web", "text": snippet, "score": 1.0}
-            for snippet in web_results
-        ]
+    {
+        "doc_id": "web",
+        "text": snippet.get("content", ""),
+        "score": 1.0
+    }
+    for snippet in web_results
+    if is_relevant(snippet, user_query)
+]
+
+
+   
+    
 
     # merge contexts
     final_context = context + web_context
     if mode == "PDF only" and not context:
-       st.warning("No relevant content found in your PDFs.")
+        st.warning("No relevant content found in your PDFs.")
 
-    
-    # Generating answer with combined context
-    answer = rag_answer(query, final_context)
+    # answer with combined context + Mem0 user memory
+    recent_msgs_for_context = st.session_state["messages"]    #[-8:]  # Last 4 turns
 
+    answer = rag_answer(user_query, final_context, active_user_id,recent_messages=recent_msgs_for_context)
 
-    # Display Qdrant context
+    # Display qdrant context
     if context:
-        st.write("📄 PDF context:")
-        for c in context[:3]:   # show top 3 chunks, but in search operation for Qdrant we are using 5 as limit
-            st.write(f"{c['doc_id']} (score={c['score']:.3f})")
-            st.write(f"- {c['text']}")
+        with st.expander("📄 PDF context", expanded=False):
+            for c in context[:3]:
+                st.write(f"{c['doc_id']} (score={c['score']:.3f})")
+                st.write(f"- {c['text']}")
 
     # Display Tavily context
     if web_context:
-        st.write("🌐 Web context:")
-        for w in web_context[:3]:
-            st.write(f"- {w['text']}")
+        with st.expander("🌐 Web context", expanded=False):
+            for w in web_context[:3]:
+                st.write(f"- {w['text']}")
 
-    st.write(f"\n\nLLM : \n{answer}")
+    # Append assistant answer to history and render
+    st.session_state["messages"].append({"role": "assistant", "content": answer})
+    with st.chat_message("assistant"):
+        st.markdown(answer)
+
+    # Send recent messages to Mem0 as memory
+    recent_msgs = st.session_state["messages"][-6:]  # last few turns
+    add_user_memories(active_user_id, recent_msgs)

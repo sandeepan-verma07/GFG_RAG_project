@@ -1,11 +1,16 @@
 from src.llm_gemma import GemmaLLM
+from src.mem0_client import get_user_memories
 
 gemma = GemmaLLM()
 
-def rag_answer(question: str, context_chunks):
+
+def rag_answer(question: str, context_chunks, user_id: str, recent_messages: list = None):
     """
     Takes a user question + retrieved Qdrant/Web chunks,
-    extracts readable text, and calls the LLM.
+    fetches long-term memories from Mem0 for this user,
+    adds recent chat history, extracts readable text, and calls the LLM.
+    
+    recent_messages: list of {"role": "user"/"assistant", "content": str} from session_state
     """
 
     def extract_text(chunk):
@@ -31,4 +36,20 @@ def rag_answer(question: str, context_chunks):
             extract_text(c) for c in context_chunks
         )
 
-    return gemma.generate(question, context_text)
+    # fetch user long term memories from Mem0
+    memories = []
+    if any(x in question.lower() for x in ["my", "me", "i ", "remember"]):
+       memories = get_user_memories(user_id, question, limit=5)
+
+    memory_text = "\n".join(memories) if memories else ""
+
+    # Recent chat history (short term memory)
+    recent_history = ""
+    if recent_messages:
+        recent_history = "RECENT CHAT HISTORY (use for 'last topic', 'we discussed' questions in a session, it may be empty if session is refreshed):\n"
+        for msg in recent_messages:   #[-6:]:  # Last 3 turns (6 messages)
+            role = "You: " if msg["role"] == "user" else "Assistant: "
+            recent_history += f"{role}{msg['content']}\n"
+        recent_history += "\n"
+
+    return gemma.generate(question, context_text, memory_text=memory_text, recent_history=recent_history)
